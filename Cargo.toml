@@ -1,0 +1,12 @@
+[package]
+name = "arken-driver"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+reqwest = { version = "0.13", features = ["json"] } # reqwest with JSON parsing support
+futures = "0.3" # for our async / await blocks
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.52.0", features = ["full"] } # for our async runtime
+zip = "2"
