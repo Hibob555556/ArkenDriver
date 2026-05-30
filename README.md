@@ -67,6 +67,24 @@ Platform mappings:
 - `linux`: downloads the `linux64` ChromeDriver package and installs `chromedriver`.
 - `mac`: downloads `mac-arm64` on Apple Silicon or `mac-x64` otherwise, and installs `chromedriver`.
 
+## Git Hooks
+
+This repo includes a Husky-style Git hook in `.githooks/pre-commit`.
+
+Enable it once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+The pre-commit hook runs:
+
+- `cargo fmt --check`
+- `cargo clippy --locked -- -D warnings`
+- Fast unit tests that do not call the ChromeDriver download endpoints
+
+Full network-based tests still run in CI with `cargo test --locked`.
+
 ## Example
 
 ```rust

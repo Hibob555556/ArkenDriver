@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+echo "Running cargo fmt --check..."
+cargo fmt --check
+
+echo "Running cargo clippy..."
+cargo clippy --locked -- -D warnings
+
+echo "Running fast unit tests..."
+cargo test --locked test_make_latest_chrome_driver_download_url
+cargo test --locked test_make_linux_chrome_driver_download_url
+cargo test --locked test_chrome_driver_executable_name
+cargo test --locked test_parse_chrome_driver_version
+cargo test --locked test_missing_chrome_driver_is_not_current
+
+echo "Pre-commit checks passed."

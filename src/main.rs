@@ -4,7 +4,7 @@
 // Version: 1.0.0
 
 // This is the main entry point for the ArkenDriver application. It loads the configuration from ArkenDriver.config
-// and then fetches the latest ChromeDriver based on the specified download path and platform. The application 
+// and then fetches the latest ChromeDriver based on the specified download path and platform. The application
 // uses Tokio for asynchronous execution and handles errors gracefully by returning a Result type.
 mod config;
 mod infra;
