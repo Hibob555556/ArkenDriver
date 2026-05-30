@@ -1,3 +1,8 @@
+// Author: Cayden
+// Date: 05/29/2026
+// License: MIT
+// Version: 1.0.0
+
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;

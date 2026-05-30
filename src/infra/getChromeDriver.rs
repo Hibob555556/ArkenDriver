@@ -1,4 +1,16 @@
-const CHROME_DRIVER_BASE_URL: &str = "https://storage.googleapis.com/chrome-for-testing-public/{{REPLACE}}/win64/chromedriver-win64.zip";
+// src/infra/getChromeDriver.rs
+// This module is responsible for fetching the latest ChromeDriver version, constructing the download URL, and downloading the ChromeDriver to a specified directory.
+// It includes functions to fetch the latest version, construct the download URL, and handle the download and extraction of the ChromeDriver. Additionally, it contains unit tests for each of these functions to ensure they work as expected.
+// The module uses the `reqwest` crate for making HTTP requests and the `zip` crate for handling ZIP file extraction. It also includes error handling to manage potential issues during the download and extraction process.
+// Note: The download URL and version URL are specific to the ChromeDriver for Windows (win64). If support for other platforms is needed, additional logic will be required to handle different URLs and file formats.
+
+// Author: Cayden
+// Date: 05/29/2026
+// License: MIT
+// Version: 1.0.0
+
+const CHROME_DRIVER_BASE_URL: &str =
+    "https://storage.googleapis.com/chrome-for-testing-public/{{REPLACE}}/win64/chromedriver-win64.zip";
 const CHROME_DRIVER_VERSION_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE";
 
@@ -7,7 +19,7 @@ const CHROME_DRIVER_VERSION_URL: &str =
  * Returns the download URL of the latest ChromeDriver.
  */
 pub async fn fetch_latest_chrome_driver(
-    chrome_driver_dir: &std::path::Path,
+    chrome_driver_dir: &std::path::Path
 ) -> Result<String, Box<dyn std::error::Error>> {
     let version = fetch_latest_chrome_driver_version().await?;
     let url = make_latest_chrome_driver_download_url(&version);
@@ -39,7 +51,7 @@ fn make_latest_chrome_driver_download_url(version: &str) -> String {
  */
 async fn download_chrome_driver(
     url: &str,
-    chrome_driver_dir: &std::path::Path,
+    chrome_driver_dir: &std::path::Path
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Downloading ChromeDriver from: {url}");
 
@@ -62,9 +74,7 @@ async fn download_chrome_driver(
     std::fs::remove_file(&zip_path)?;
 
     // move chromdriver executable to the target directory
-    let extracted_path = chrome_driver_dir
-        .join("chromedriver-win64")
-        .join("chromedriver.exe");
+    let extracted_path = chrome_driver_dir.join("chromedriver-win64").join("chromedriver.exe");
     let target_path = chrome_driver_dir.join("chromedriver.exe");
     std::fs::rename(extracted_path, target_path)?;
     let target_path = chrome_driver_dir.join("chromedriver-win64");
@@ -97,4 +107,55 @@ async fn download_chrome_driver(
     }
 
     Ok(())
+}
+
+/**
+ * Unit tests for the functions in this module.
+ * Tests include fetching the latest ChromeDriver version, constructing the download URL, and downloading the ChromeDriver.
+ */
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /**
+     * Tests the fetch_latest_chrome_driver_version function to ensure it retrieves a non-empty version string.
+     */
+    #[tokio::test]
+    async fn test_fetch_latest_chrome_driver_version() {
+        let version = fetch_latest_chrome_driver_version().await.unwrap();
+        assert!(!version.is_empty(), "Version should not be empty");
+    }
+
+    /**
+     * Tests the make_latest_chrome_driver_download_url function to ensure it constructs a valid URL containing the version.
+     */
+    #[test]
+    fn test_make_latest_chrome_driver_download_url() {
+        let version = "123.0.1.2.3";
+        let url = make_latest_chrome_driver_download_url(version);
+        assert!(url.contains(version), "URL should contain the version");
+        assert!(
+            url.starts_with("https://storage.googleapis.com/"),
+            "URL should start with the base URL"
+        );
+    }
+
+    /**
+     * Tests the download_chrome_driver function to ensure it successfully downloads the ChromeDriver and saves it to disk.
+     * This test will create a temporary directory for the download and clean up after the test is complete.
+     */
+    #[tokio::test]
+    async fn test_download_chrome_driver() {
+        let version = fetch_latest_chrome_driver_version().await.unwrap();
+        let url = make_latest_chrome_driver_download_url(&version);
+        let response = reqwest::get(&url).await.unwrap();
+        assert!(response.status().is_success(), "Download URL should be accessible");
+        let temp_dir = std::env::temp_dir().join("chromedriver_test");
+        std::fs::create_dir_all(&temp_dir).unwrap();
+        let result = download_chrome_driver(&url, &temp_dir).await;
+        assert!(result.is_ok(), "Download should succeed");
+        let chromedriver_path = temp_dir.join("chromedriver.exe");
+        assert!(chromedriver_path.exists(), "Chromedriver should exist after download");
+        std::fs::remove_dir_all(temp_dir).unwrap(); // Clean up after test
+    }
 }
