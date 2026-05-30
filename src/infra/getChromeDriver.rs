@@ -9,8 +9,13 @@
 // License: MIT
 // Version: 1.0.0
 
+use std::path::Path;
+use std::process::Command;
+
+use crate::config::ChromeDriverPlatform;
+
 const CHROME_DRIVER_BASE_URL: &str =
-    "https://storage.googleapis.com/chrome-for-testing-public/{{REPLACE}}/win64/chromedriver-win64.zip";
+    "https://storage.googleapis.com/chrome-for-testing-public/{{VERSION}}/{{PLATFORM}}/chromedriver-{{PLATFORM}}.zip";
 const CHROME_DRIVER_VERSION_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE";
 
@@ -19,11 +24,18 @@ const CHROME_DRIVER_VERSION_URL: &str =
  * Returns the download URL of the latest ChromeDriver.
  */
 pub async fn fetch_latest_chrome_driver(
-    chrome_driver_dir: &std::path::Path
+    chrome_driver_dir: &Path,
+    platform: ChromeDriverPlatform,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let version = fetch_latest_chrome_driver_version().await?;
-    let url = make_latest_chrome_driver_download_url(&version);
-    download_chrome_driver(&url, chrome_driver_dir).await?;
+
+    if is_chrome_driver_current(chrome_driver_dir, platform, &version)? {
+        println!("ChromeDriver {version} is already installed.");
+        return Ok(make_latest_chrome_driver_download_url(&version, platform));
+    }
+
+    let url = make_latest_chrome_driver_download_url(&version, platform);
+    download_chrome_driver(&url, chrome_driver_dir, platform).await?;
     Ok(url)
 }
 
@@ -41,8 +53,71 @@ async fn fetch_latest_chrome_driver_version() -> Result<String, reqwest::Error> 
  * Constructs the download URL for the latest ChromeDriver using the provided version.
  * Returns the constructed URL as a String.
  */
-fn make_latest_chrome_driver_download_url(version: &str) -> String {
-    CHROME_DRIVER_BASE_URL.replace("{{REPLACE}}", version)
+fn make_latest_chrome_driver_download_url(version: &str, platform: ChromeDriverPlatform) -> String {
+    CHROME_DRIVER_BASE_URL
+        .replace("{{VERSION}}", version)
+        .replace("{{PLATFORM}}", chrome_driver_platform_package(platform))
+}
+
+fn is_chrome_driver_current(
+    chrome_driver_dir: &Path,
+    platform: ChromeDriverPlatform,
+    latest_version: &str,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let Some(installed_version) = get_installed_chrome_driver_version(chrome_driver_dir, platform)?
+    else {
+        return Ok(false);
+    };
+
+    Ok(installed_version == latest_version)
+}
+
+fn get_installed_chrome_driver_version(
+    chrome_driver_dir: &Path,
+    platform: ChromeDriverPlatform,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    let chrome_driver_path = chrome_driver_dir.join(chrome_driver_executable_name(platform));
+
+    if !chrome_driver_path.exists() {
+        return Ok(None);
+    }
+
+    let output = match Command::new(chrome_driver_path).arg("--version").output() {
+        Ok(output) => output,
+        Err(_) => return Ok(None),
+    };
+
+    if !output.status.success() {
+        return Ok(None);
+    }
+
+    let stdout = String::from_utf8(output.stdout)?;
+    Ok(parse_chrome_driver_version(&stdout).map(str::to_string))
+}
+
+fn parse_chrome_driver_version(output: &str) -> Option<&str> {
+    output.split_whitespace().nth(1)
+}
+
+fn chrome_driver_platform_package(platform: ChromeDriverPlatform) -> &'static str {
+    match platform {
+        ChromeDriverPlatform::Windows => "win64",
+        ChromeDriverPlatform::Linux => "linux64",
+        ChromeDriverPlatform::Mac => {
+            if cfg!(target_arch = "aarch64") {
+                "mac-arm64"
+            } else {
+                "mac-x64"
+            }
+        }
+    }
+}
+
+fn chrome_driver_executable_name(platform: ChromeDriverPlatform) -> &'static str {
+    match platform {
+        ChromeDriverPlatform::Windows => "chromedriver.exe",
+        ChromeDriverPlatform::Linux | ChromeDriverPlatform::Mac => "chromedriver",
+    }
 }
 
 /**
@@ -51,7 +126,8 @@ fn make_latest_chrome_driver_download_url(version: &str) -> String {
  */
 async fn download_chrome_driver(
     url: &str,
-    chrome_driver_dir: &std::path::Path
+    chrome_driver_dir: &Path,
+    platform: ChromeDriverPlatform,
 ) -> Result<(), Box<dyn std::error::Error>> {
     println!("Downloading ChromeDriver from: {url}");
 
@@ -74,20 +150,24 @@ async fn download_chrome_driver(
     std::fs::remove_file(&zip_path)?;
 
     // move chromdriver executable to the target directory
-    let extracted_path = chrome_driver_dir.join("chromedriver-win64").join("chromedriver.exe");
-    let target_path = chrome_driver_dir.join("chromedriver.exe");
+    let platform_package = chrome_driver_platform_package(platform);
+    let executable_name = chrome_driver_executable_name(platform);
+    let extracted_path = chrome_driver_dir
+        .join(format!("chromedriver-{platform_package}"))
+        .join(executable_name);
+    let target_path = chrome_driver_dir.join(executable_name);
     std::fs::rename(extracted_path, target_path)?;
-    let target_path = chrome_driver_dir.join("chromedriver-win64");
+    let target_path = chrome_driver_dir.join(format!("chromedriver-{platform_package}"));
     std::fs::remove_dir_all(target_path)?;
 
     // For Unix-based systems (Linux and macOS), we need to set the executable permissions for the chromedriver file.
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let chromedriver_path = "/chromedriver/chromedriver.exe";
+        let chromedriver_path = chrome_driver_dir.join(executable_name);
         let mut permissions = std::fs::metadata(chromedriver_path)?.permissions();
         permissions.set_mode(0o755); // rwxr-xr-x
-        std::fs::set_permissions(chromedriver_path, permissions)?;
+        std::fs::set_permissions(chrome_driver_dir.join(executable_name), permissions)?;
     }
 
     // On Windows, the executable permissions are handled by the file system, so no additional steps are needed.
@@ -100,10 +180,10 @@ async fn download_chrome_driver(
     #[cfg(target_os = "macos")]
     {
         use std::os::unix::fs::PermissionsExt;
-        let chromedriver_path = "/chromedriver/chromedriver";
+        let chromedriver_path = chrome_driver_dir.join(executable_name);
         let mut permissions = std::fs::metadata(chromedriver_path)?.permissions();
         permissions.set_mode(0o755); // rwxr-xr-x
-        std::fs::set_permissions(chromedriver_path, permissions)?;
+        std::fs::set_permissions(chrome_driver_dir.join(executable_name), permissions)?;
     }
 
     Ok(())
@@ -132,12 +212,61 @@ mod tests {
     #[test]
     fn test_make_latest_chrome_driver_download_url() {
         let version = "123.0.1.2.3";
-        let url = make_latest_chrome_driver_download_url(version);
+        let url = make_latest_chrome_driver_download_url(version, ChromeDriverPlatform::Windows);
         assert!(url.contains(version), "URL should contain the version");
         assert!(
             url.starts_with("https://storage.googleapis.com/"),
             "URL should start with the base URL"
         );
+        assert!(
+            url.ends_with("/win64/chromedriver-win64.zip"),
+            "Windows URL should use the win64 package"
+        );
+    }
+
+    #[test]
+    fn test_make_linux_chrome_driver_download_url() {
+        let url =
+            make_latest_chrome_driver_download_url("123.0.1.2.3", ChromeDriverPlatform::Linux);
+
+        assert!(
+            url.ends_with("/linux64/chromedriver-linux64.zip"),
+            "Linux URL should use the linux64 package"
+        );
+    }
+
+    #[test]
+    fn test_chrome_driver_executable_name() {
+        assert_eq!(
+            chrome_driver_executable_name(ChromeDriverPlatform::Windows),
+            "chromedriver.exe"
+        );
+        assert_eq!(
+            chrome_driver_executable_name(ChromeDriverPlatform::Linux),
+            "chromedriver"
+        );
+        assert_eq!(
+            chrome_driver_executable_name(ChromeDriverPlatform::Mac),
+            "chromedriver"
+        );
+    }
+
+    #[test]
+    fn test_parse_chrome_driver_version() {
+        let output = "ChromeDriver 125.0.6422.141 (4b1f04fb)";
+        let version = parse_chrome_driver_version(output);
+
+        assert_eq!(version, Some("125.0.6422.141"));
+    }
+
+    #[test]
+    fn test_missing_chrome_driver_is_not_current() {
+        let temp_dir = std::env::temp_dir().join("missing_chromedriver_test");
+        let result =
+            is_chrome_driver_current(&temp_dir, ChromeDriverPlatform::Windows, "125.0.6422.141")
+                .unwrap();
+
+        assert!(!result, "Missing ChromeDriver should not be current");
     }
 
     /**
@@ -147,15 +276,21 @@ mod tests {
     #[tokio::test]
     async fn test_download_chrome_driver() {
         let version = fetch_latest_chrome_driver_version().await.unwrap();
-        let url = make_latest_chrome_driver_download_url(&version);
+        let url = make_latest_chrome_driver_download_url(&version, ChromeDriverPlatform::Windows);
         let response = reqwest::get(&url).await.unwrap();
-        assert!(response.status().is_success(), "Download URL should be accessible");
+        assert!(
+            response.status().is_success(),
+            "Download URL should be accessible"
+        );
         let temp_dir = std::env::temp_dir().join("chromedriver_test");
         std::fs::create_dir_all(&temp_dir).unwrap();
-        let result = download_chrome_driver(&url, &temp_dir).await;
+        let result = download_chrome_driver(&url, &temp_dir, ChromeDriverPlatform::Windows).await;
         assert!(result.is_ok(), "Download should succeed");
         let chromedriver_path = temp_dir.join("chromedriver.exe");
-        assert!(chromedriver_path.exists(), "Chromedriver should exist after download");
+        assert!(
+            chromedriver_path.exists(),
+            "Chromedriver should exist after download"
+        );
         std::fs::remove_dir_all(temp_dir).unwrap(); // Clean up after test
     }
 }

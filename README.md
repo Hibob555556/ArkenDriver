@@ -43,6 +43,30 @@ ArkenDriver is a browser automation framework built from scratch in Rust that co
 - [ ] Reporting engine
 - [ ] CI/CD integration
 
+## Configuration
+
+ArkenDriver reads configuration from `ArkenDriver.config` in the project root.
+
+```json
+{
+  "ChromeDriverDownloadPath": "C:/Users/Cayden/Repos/ArkenDriver/src/chromedriver/",
+  "Platform": "windows"
+}
+```
+
+### Options
+
+- `ChromeDriverDownloadPath`: Directory where ChromeDriver should be downloaded and extracted.
+- `Platform`: ChromeDriver platform to download. Supported values are `windows`, `linux`, and `mac`.
+
+If `Platform` is omitted, ArkenDriver defaults to `windows`.
+
+Platform mappings:
+
+- `windows`: downloads the `win64` ChromeDriver package and installs `chromedriver.exe`.
+- `linux`: downloads the `linux64` ChromeDriver package and installs `chromedriver`.
+- `mac`: downloads `mac-arm64` on Apple Silicon or `mac-x64` otherwise, and installs `chromedriver`.
+
 ## Example
 
 ```rust
