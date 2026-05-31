@@ -1,4 +1,4 @@
-// src/infra/getChromeDriver.rs
+// src/infra/chrome_driver_installer.rs
 // This module is responsible for fetching the latest ChromeDriver version, constructing the download URL, and downloading the ChromeDriver to a specified directory.
 // It includes functions to fetch the latest version, construct the download URL, and handle the download and extraction of the ChromeDriver. Additionally, it contains unit tests for each of these functions to ensure they work as expected.
 // The module uses the `reqwest` crate for making HTTP requests and the `zip` crate for handling ZIP file extraction. It also includes error handling to manage potential issues during the download and extraction process.

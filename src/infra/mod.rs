@@ -3,5 +3,5 @@
 // License: MIT
 // Version: 1.0.0
 
-#[path = "getChromeDriver.rs"]
-pub mod get_chrome_driver;
+pub mod chrome_driver_installer;
+pub mod chrome_driver_process;
