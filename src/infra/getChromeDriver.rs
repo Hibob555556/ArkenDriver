@@ -275,22 +275,37 @@ mod tests {
      */
     #[tokio::test]
     async fn test_download_chrome_driver() {
-        let version = fetch_latest_chrome_driver_version().await.unwrap();
-        let url = make_latest_chrome_driver_download_url(&version, ChromeDriverPlatform::Windows);
+        // Use a known version for testing to avoid issues with the latest version changing during the test
+        let version = "125.0.6422.141";
+        let url = make_latest_chrome_driver_download_url(version, ChromeDriverPlatform::Windows);
+
+        // Check if the URL is accessible before attempting to download
         let response = reqwest::get(&url).await.unwrap();
+
+        // If the URL is not accessible, the test will fail here, preventing a false failure in the download function
         assert!(
             response.status().is_success(),
             "Download URL should be accessible"
         );
+
+        // Create a temporary directory for the download test
         let temp_dir = std::env::temp_dir().join("chromedriver_test");
         std::fs::create_dir_all(&temp_dir).unwrap();
         let result = download_chrome_driver(&url, &temp_dir, ChromeDriverPlatform::Windows).await;
+
+        // Clean up the temporary directory after the test
         assert!(result.is_ok(), "Download should succeed");
+
+        // Verify that the chromedriver executable exists in the temporary directory after the download
         let chromedriver_path = temp_dir.join("chromedriver.exe");
+
+        // Check if the chromedriver executable exists after the download
         assert!(
             chromedriver_path.exists(),
             "Chromedriver should exist after download"
         );
+
+        // Clean up the temporary directory after the test
         std::fs::remove_dir_all(temp_dir).unwrap(); // Clean up after test
     }
 }
